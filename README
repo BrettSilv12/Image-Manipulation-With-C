@@ -1,0 +1,143 @@
+1. Names -
+    Brett Silverberg and Ruiqi Xu
+
+
+
+2. Architecture -
+    Our solution centered around Compress40.c being a "driver" file. It
+    maintained our data and sent seperate modules the data only necessary to
+    that specific module in order to maintain secret keeping and modularity. 
+    I will outline our architecture below file-by-file, specifying functions
+    and data structures 
+
+    40image.c - 
+        This file handles our command line and argv variables. It checks for
+        different flags to decide whether the user would like to compress or
+        decompress an input, and then it creates a file pointer from the given
+        inputs to pass on to Compress40.c
+
+    Compress40.c -
+        This file receives a file pointer as input and is called from the 
+        40image file. 
+        IF compress is called, the file pointer is used to populate a Pnm_ppm
+        struct with the data from the input pnm file. It then compresses the 
+        given image raster and outputs a compressed image file (of format 
+        specified by the doc) to stdout.
+        IF decompress is called, the file pointer is used to populate a 2d 
+        Uarray with compressed words, of format specified by the doc. It then
+        decompresses these words and outputs a pnm image to stdout.
+        Compress40.c uses 2DUarrays of custom "pixel structs" to hold data at
+        every step of the solution. 
+        These "pixel structs" contain -
+            a Pnm-rgb object
+            a composite object
+            a dct object (represents DCT outputs for that pixel's whole block)
+            two unsigned values to represent average chroma values (of a 
+                pixel's whole block)
+            a uint64_t to represent the pixel's block's compressed word
+        No module of the code receives this entire struct, the modules instead
+        receive the components of the struct that are specific to the module.
+        For example, our cv_to_rgb function only ever receives the data of a 
+        composite object from a pixel struct and outputs a Pnm_rgb object. 
+        It never sees any other piece of data. 
+        Similarly, rgb_to_cv only ever receives a Pnm_rgb object and outputs a
+        composite object. 
+        As Compress40 drives through the steps of compression and 
+        decompression, it populates the fields of every pixel struct in the 
+        raster, until it has the data necessary for output.
+
+    rgb_cv.c -
+        When used in compression, this file receives a Pnm_rgb struct, and 
+            outputs just a compression struct object. 
+            The composite struct object is defined in rgb_cv.h, and simply 
+            contains a spot for -
+                a float for a y value
+                a float for a Pb value
+                a float for a Pr value
+        When used in decompression, this file receives the values from a single
+            composite struct object and outputs a Pnm_rgb object.
+    
+    average_chroma.c - 
+        When used in compression, this file will just receive 4 total chroma 
+        values at a time; either 4 Pb values or 4 Pr values. It will then 
+        output the Arith40_index_of_chroma() output for the average of those 4 
+        values. 
+        When used in decompression, this file will just receive one chroma
+        values (either a Pb or a Pr representing the average of a whole
+        block), and output the return from Arith40_chroma_of_index()
+
+    dct_transformation.c -
+        When used in compression, this file will receive 4 y values 
+            (1 for every pixel in a block), and output a Dct struct object.
+            The Dct struct object is defined in dct_transformation.h, and 
+            contains -
+                an unsigned a value
+                a signed b value
+                a signed c value
+                a signed d value
+            That are the outputs of our Discreet Cosine Transform. 
+        When used in decompression, this file will receive a Dct struct
+            object from one pixel in a block (this DCT struct will be 
+            the same across every pixel in the same block), and outputs
+            a Hanson_Seq populated with 4 'y' values. The 4 y values correspond
+            to the 4 pixels in a block. the 0th index in the Hanson_Seq maps
+            to pixel at [0,0] in a block, the 1th index with pixel [0,1], and 
+            so on. 
+        
+    bitpack.c - This file just inputs a uint64_t word with additional 
+        optional parameters such as width, and lsb.
+        When used in compression, this file will receive the DCT and average
+            chroma values that we've gathered in our previous steps one-by-one.
+            It will then output uint64_ts with that given input packed into 
+            a specific slot in that uint64_t. After every call from 
+            Compress40.c, we are left with a compressed word that can be output
+        When used in decompression, this file will receive a single bitpacked
+            word, and one-by-one will extract specific fields to represent our
+            needed DCT values and average chroma values. After every call from
+            Compress40.c, we'll be left with a DCT object (this is created in
+            Compress40.c's decompress_bitpack_help() function, as bitpack.c
+            doesn't know what a DCT struct is) and 2 average chroma values. 
+            These same outputs will be populated to every pixel struct in a 
+            corresponding block
+
+    In order of the above steps, the flow of module usage is
+        Compression -
+            40image.c
+            Compress40.c
+            rgb_cv.c
+            average_chroma.c
+            dct_transformation.c
+            bitpack.c
+        Decompression -
+            40image.c 
+            Compress40.c 
+            bitpack.c 
+            dct_transformation.c
+            average_chroma.c
+            rgb_cv.c
+        The data all flows through Compress40.c between each step after it's 
+        first used. Compress40.c also handles outputs to stdout when the 
+        program is finished running.
+
+
+
+3. Help received -
+    We received some help from TAs (Again, sorry we're bad with names). We 
+    mainly received help with figuring out issues with array population
+    and number quantization. We also got TAs to look over our design doc
+    before submitting.
+
+
+
+4. What's correctly implemented -
+    We believe that the entire solution has been correctly implemented
+
+
+
+5. Time spent analyzing -
+    We spent roughly 8-10 hours analyzing the problems / writing the spec 
+
+
+
+6. Time spent coding -
+    We spent roughly 40 hours coding our solution, post-analysis
